@@ -42,11 +42,3 @@ API ini cocok digunakan sebagai backend aplikasi web atau mobile untuk membantu 
 
 ---
 
-## Instalasi dan Setup
-
-1. Clone repository  
-2. Buat virtual environment dan aktifkan  
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/macOS
-   venv\Scripts\activate     # Windows
