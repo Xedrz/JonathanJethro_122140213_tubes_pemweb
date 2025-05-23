@@ -1,0 +1,3 @@
+[run]
+source = personal_book_manager
+omit = personal_book_manager/test*
