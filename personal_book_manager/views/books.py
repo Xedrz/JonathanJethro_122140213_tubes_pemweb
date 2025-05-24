@@ -3,6 +3,14 @@ from pyramid.httpexceptions import HTTPFound, HTTPNotFound, HTTPBadRequest
 from ..models import Book, BookStatus
 from ..services.api import OpenLibraryService
 import datetime
+from personal_book_manager.utils.jwt import verify_jwt
+
+@view_config(route_name='protected', renderer='json')
+def protected_view(request):
+    payload = verify_jwt(request)
+    user_id = payload.get("sub")
+    return {"message": f"Hello, user {user_id}!"}
+
 
 def parse_book_status(value):
     """Mengubah input string menjadi enum BookStatus dari nama atau nilai"""

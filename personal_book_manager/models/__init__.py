@@ -4,7 +4,10 @@ from sqlalchemy.orm import configure_mappers
 import zope.sqlalchemy
 from .book import Book, BookStatus 
 from .mymodel import MyModel
-
+from .book import Book, BookStatus
+from .mymodel import MyModel
+from .user import User
+from .revoked_token import RevokedToken
 
 
 # run configure_mappers after defining all of the models to ensure
