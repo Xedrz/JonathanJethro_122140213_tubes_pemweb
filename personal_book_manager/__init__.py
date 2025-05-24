@@ -8,6 +8,7 @@ def main(global_config, **settings):
     meta.Base.metadata.bind = engine
     meta.DBSession.configure(bind=engine)
 
+    config.include('pyramid_jinja2')
     config.include('pyramid_tm')
     config.include('.models')
     config.include('.routes')
