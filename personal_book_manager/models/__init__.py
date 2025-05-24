@@ -4,14 +4,13 @@ from sqlalchemy.orm import configure_mappers
 import zope.sqlalchemy
 from .book import Book, BookStatus 
 from .mymodel import MyModel
-from .book import Book, BookStatus
-from .mymodel import MyModel
+from .user import DBSession
+from .meta import Base
 from .user import User
 from .revoked_token import RevokedToken
 
+__all__ = ['DBSession', 'Base']
 
-# run configure_mappers after defining all of the models to ensure
-# all relationships can be setup
 configure_mappers()
 
 

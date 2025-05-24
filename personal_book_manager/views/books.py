@@ -139,3 +139,4 @@ def book_delete(request):
 
     request.dbsession.delete(book)
     return {'success': True, 'message': 'Buku berhasil dihapus'}
+

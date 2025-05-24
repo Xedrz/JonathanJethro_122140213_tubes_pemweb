@@ -1,18 +1,24 @@
 from pyramid.httpexceptions import HTTPUnauthorized
-import jwt
+import jwt, datetime
 
 SECRET_KEY = 'rahasia-super-aman'
+ALGORITHM = 'HS256'
 
-def authenticated_user(request):
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        raise HTTPUnauthorized()
+def create_token(user_id):
+    jti = f"{user_id}-{datetime.datetime.utcnow().isoformat()}"
+    payload = {
+        "sub": user_id,
+        "jti": jti,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=4)
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    token = auth_header.split(' ')[1]
+def get_payload(token):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        return payload['sub']
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise HTTPUnauthorized(json_body={"error": "Token expired"})
     except jwt.InvalidTokenError:
         raise HTTPUnauthorized(json_body={"error": "Invalid token"})
+
+
