@@ -3,7 +3,7 @@ from alembic import context
 from pyramid.paster import get_appsettings, setup_logging
 from sqlalchemy import engine_from_config
 
-from personal_book_manager.models.meta import Base
+from personal_book_manager.models.user import Base
 
 config = context.config
 

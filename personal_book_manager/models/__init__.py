@@ -4,10 +4,9 @@ from sqlalchemy.orm import configure_mappers
 import zope.sqlalchemy
 from .book import Book, BookStatus 
 from .mymodel import MyModel
-from .user import DBSession
+from .meta import DBSession
 from .meta import Base
 from .user import User
-from .revoked_token import RevokedToken
 
 __all__ = ['DBSession', 'Base']
 
@@ -19,6 +18,7 @@ def get_engine(settings, prefix='sqlalchemy.'):
 
 
 def get_session_factory(engine):
+    
     factory = sessionmaker()
     factory.configure(bind=engine)
     return factory

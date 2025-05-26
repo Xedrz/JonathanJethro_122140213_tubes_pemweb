@@ -1,16 +1,16 @@
-from sqlalchemy import Column, Integer, String, Text, Date, Enum, Float
+from sqlalchemy import Column, Integer, String, Text, Date, Enum, Float, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from .meta import Base
 import enum
+from sqlalchemy.exc import IntegrityError
 
 class BookStatus(enum.Enum):
-    WANT_TO_READ = "WANT_TO_READ"
+    UNREAD = "UNREAD"
     READING = "READING"
     FINISHED = "FINISHED"
-    
 
 class Book(Base):
-    """Model untuk tabel buku pribadi"""
     __tablename__ = 'books'
 
     id = Column(Integer, primary_key=True)
@@ -22,13 +22,20 @@ class Book(Base):
     description = Column(Text)
     pages = Column(Integer)
 
-    # Tambahkan name="bookstatus" untuk kompatibilitas PostgreSQL
-    status = Column(Enum(BookStatus, name="bookstatus", values_callable=lambda x: [e.value for e in x]), nullable=False)
+    # Status Buku
+    status = Column(
+        Enum(BookStatus, name="bookstatus", values_callable=lambda x: [e.value for e in x]),
+        nullable=False, default=BookStatus.UNREAD 
+    )
 
     rating = Column(Float)
     notes = Column(Text)
     created_at = Column(Date, server_default=func.now())
     updated_at = Column(Date, onupdate=func.now())
+
+    # Relasi ke User
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    user = relationship("User", back_populates="books")
 
     def to_dict(self):
         return {
@@ -46,3 +53,12 @@ class Book(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+# Fungsi untuk memastikan status valid
+def is_valid_status(status):
+    try:
+        BookStatus(status)  # Coba untuk mengonversi string ke enum
+        return True
+    except ValueError:
+        return False
+

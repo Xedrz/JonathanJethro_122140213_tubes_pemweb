@@ -33,6 +33,7 @@ class OpenLibraryService:
             print(f"Error searching books: {e}")
             return []
     
+    
     @classmethod
     def get_book_details(cls, openlibrary_id):
         """Mendapatkan detail buku dari OpenLibrary"""

@@ -1,16 +1,26 @@
 from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPBadRequest, HTTPUnauthorized
-from ..models import User, RevokedToken
-import bcrypt, jwt, datetime
+from ..models import User
 from sqlalchemy import or_
-from personal_book_manager.security import get_payload
+from personal_book_manager.security import create_token
+from jwt import decode as jwt_decode, ExpiredSignatureError, InvalidTokenError
+from personal_book_manager.security import get_secret_key
+import bcrypt
+from pyramid.response import Response
 
-SECRET_KEY = 'rahasia-super-aman'
 ALGORITHM = 'HS256'
 
-@view_config(route_name='register', renderer='json', request_method='POST')
+
+@view_config(route_name='register', renderer='json', request_method=['POST', 'OPTIONS'])
 def register(request):
-    data = request.json_body
+    if request.method == 'OPTIONS':
+        return Response(status=200)
+
+    try:
+        data = request.json_body
+    except Exception:
+        return HTTPBadRequest(json_body={"error": "Invalid JSON"})
+
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
@@ -29,9 +39,17 @@ def register(request):
     request.dbsession.add(user)
     return {"message": "Registered successfully"}
 
-@view_config(route_name='login', renderer='json', request_method='POST')
+
+@view_config(route_name='login', renderer='json', request_method=['POST', 'OPTIONS'])
 def login(request):
-    data = request.json_body
+    if request.method == 'OPTIONS':
+        return Response(status=200)
+
+    try:
+        data = request.json_body
+    except Exception:
+        return HTTPBadRequest(json_body={"error": "Invalid JSON"})
+
     identifier = data.get('username') or data.get('email')
     password = data.get('password')
 
@@ -41,35 +59,28 @@ def login(request):
     user = request.dbsession.query(User).filter(
         or_(User.username == identifier, User.email == identifier)
     ).first()
+
     if not user or not user.verify_password(password):
         return HTTPUnauthorized(json_body={"error": "Invalid credentials"})
 
-    jti = f"{user.id}-{datetime.datetime.utcnow().isoformat()}"
-    payload = {
-        "sub": user.id,
-        "jti": jti,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-    }
-    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    token = create_token(user.id)
     return {"token": token}
 
-@view_config(route_name='logout', request_method='POST', renderer='json')
-def logout(request):
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return HTTPBadRequest(json_body={"error": "Missing or invalid Authorization header"})
 
-    token = auth_header.replace("Bearer ", "").strip()
-    payload = get_payload(token)
-    jti = payload.get("jti")
+def require_auth(view_func):
+    def wrapper(request):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPUnauthorized(json_body={'error': 'Authorization header missing or invalid'})
 
-    if not jti:
-        return HTTPBadRequest(json_body={"error": "Invalid token structure"})
+        token = auth_header.split(' ')[1]
+        try:
+            payload = jwt_decode(token, get_secret_key(), algorithms=[ALGORITHM])
+            request.user_id = int(payload['sub'])
+        except ExpiredSignatureError:
+            raise HTTPUnauthorized(json_body={'error': 'Token kadaluarsa'})
+        except InvalidTokenError:
+            raise HTTPUnauthorized(json_body={'error': 'Token tidak valid'})
 
-    existing = request.dbsession.query(RevokedToken).filter_by(jti=jti).first()
-    if existing:
-        return HTTPBadRequest(json_body={"error": "Token already revoked"})
-
-    revoked = RevokedToken(jti=jti)
-    request.dbsession.add(revoked)
-    return {"message": "Logged out successfully"}
+        return view_func(request)
+    return wrapper
