@@ -1,20 +1,26 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import ProtectedRoute from './components/ProtectedRoute';
+import Home from './pages/Home';
+import BookDetail from './pages/BookDetail';
+import BookList from './pages/BookList';
+import AddBook from './pages/AddBook';
+import EditBook from './pages/EditBook';
 
-export default function App() {
+function App() {
   return (
     <Router>
-      <Navbar />
       <Routes>
-        <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/add" element={<AddBook />} /> 
+        <Route path="/edit/:id" element={<EditBook />} />
+        <Route path="/books" element={<BookList />} />
+        <Route path="/books/:id" element={<BookDetail />} />
       </Routes>
     </Router>
   );
 }
+
+export default App;
