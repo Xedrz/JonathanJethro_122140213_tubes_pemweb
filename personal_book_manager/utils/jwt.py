@@ -1,7 +1,7 @@
 import jwt
 from pyramid.httpexceptions import HTTPUnauthorized
+from personal_book_manager.security import get_secret_key
 
-SECRET_KEY = 'secretkey123'
 ALGORITHM = 'HS256'
 
 def verify_jwt(request):
@@ -15,7 +15,8 @@ def verify_jwt(request):
 
     token = parts[1]
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPUnauthorized("Token expired")

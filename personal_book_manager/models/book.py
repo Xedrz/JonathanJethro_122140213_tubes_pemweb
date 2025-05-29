@@ -5,6 +5,7 @@ from .meta import Base
 import enum
 from sqlalchemy.exc import IntegrityError
 
+
 class BookStatus(enum.Enum):
     UNREAD = "UNREAD"
     READING = "READING"
@@ -12,26 +13,15 @@ class BookStatus(enum.Enum):
 
 class Book(Base):
     __tablename__ = 'books'
-
+    
     id = Column(Integer, primary_key=True)
-    openlibrary_id = Column(String(255), unique=True, nullable=False)
     title = Column(String(255), nullable=False)
     author = Column(String(255))
-    published_date = Column(Date)
-    cover_url = Column(String(512))
-    description = Column(Text)
-    pages = Column(Integer)
+    description = Column(Text, nullable=True)
+    cover_url = Column(String(512), nullable=True)  
+    status = Column(Enum(BookStatus), default=BookStatus.UNREAD)
+    rating = Column(Float, default=0.0)
 
-    # Status Buku
-    status = Column(
-        Enum(BookStatus, name="bookstatus", values_callable=lambda x: [e.value for e in x]),
-        nullable=False, default=BookStatus.UNREAD 
-    )
-
-    rating = Column(Float)
-    notes = Column(Text)
-    created_at = Column(Date, server_default=func.now())
-    updated_at = Column(Date, onupdate=func.now())
 
     # Relasi ke User
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
@@ -39,19 +29,13 @@ class Book(Base):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'openlibrary_id': self.openlibrary_id,
-            'title': self.title,
-            'author': self.author,
-            'published_date': self.published_date.isoformat() if self.published_date else None,
-            'cover_url': self.cover_url,
-            'description': self.description,
-            'pages': self.pages,
-            'status': self.status.value if self.status else None,
-            'rating': self.rating,
-            'notes': self.notes,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        'id': self.id,
+        'title': self.title,
+        'author': self.author,
+        'description': self.description,
+        'cover_url': self.cover_url,
+        'status': self.status.value if self.status else 'UNREAD',
+        'rating': self.rating if self.rating is not None else 0,
         }
 
 # Fungsi untuk memastikan status valid

@@ -2,13 +2,17 @@ from pyramid.view import view_config
 from pyramid.response import Response
 from pyramid.httpexceptions import HTTPBadRequest, HTTPNotFound
 from ..models import Book, BookStatus
-from ..services.api import OpenLibraryService
 from personal_book_manager.views.auth import require_auth
 from sqlalchemy.exc import IntegrityError
 import logging
-import transaction
-from datetime import date
+from datetime import datetime
+import os
+import uuid
+import shutil
 
+
+UPLOAD_FOLDER = 'static/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 logger = logging.getLogger(__name__)
 
 
@@ -23,93 +27,152 @@ def parse_book_status(status_str):
 from sqlalchemy import or_
 
 @view_config(route_name='get_books', renderer='json', request_method='GET')
+@require_auth
 def get_books(request):
-    search_query = request.params.get('query', '')  # Mendapatkan query dari parameter request
-    logger.info(f"Mengambil buku dengan query: {search_query}")
+    try:
+        search_query = request.params.get('query', '')
+        query = request.dbsession.query(Book).filter(Book.user_id == request.user_id)
 
-    if search_query:  # Jika ada query pencarian
-        # Cari buku berdasarkan judul atau penulis
-        books = request.dbsession.query(Book).filter(
-            or_(
-                Book.title.ilike(f'%{search_query}%'),  # Pencarian berdasarkan judul
-                Book.author.ilike(f'%{search_query}%')  # Pencarian berdasarkan penulis
+        if search_query:
+            query = query.filter(
+                or_(
+                    Book.title.ilike(f'%{search_query}%'),
+                    Book.author.ilike(f'%{search_query}%')
+                )
             )
-        ).all()
-    else:
-        # Jika tidak ada query pencarian, ambil semua buku
-        books = request.dbsession.query(Book).all()
 
-    return [book.to_dict() for book in books]  # Mengembalikan data buku dalam format JSON
+        # Selalu urutkan berdasarkan judul secara ascending
+        books = query.order_by(Book.title.asc()).all()
+        
+        return {
+            'success': True,
+            'books': [book.to_dict() for book in books]
+        }
+    except Exception as e:
+        logging.error(f"Error fetching books: {str(e)}")
+        return {'success': False, 'message': 'Failed to fetch books'}
+
+@view_config(route_name='book_add', request_method='POST', renderer='json')
+@require_auth
+def book_add(request):
+    try:
+        # Handle JSON data
+        if request.content_type == 'application/json':
+            data = request.json_body
+        # Handle FormData
+        else:
+            data = {
+                'title': request.POST.get('title', 'Untitled'),
+                'author': request.POST.get('author', 'Unknown'),
+                'description': request.POST.get('description', ''),
+            }
+
+        if not data.get('title'):
+            return HTTPBadRequest(json_body={'error': 'Title is required'})
+
+        book = Book(
+            title=data.get('title', 'Untitled'),
+            author=data.get('author', 'Unknown'),
+            description=data.get('description', ''),
+            status=BookStatus.UNREAD,
+            user_id=request.user_id
+        )
+
+        request.dbsession.add(book)
+        request.dbsession.flush()
+        
+        # Handle file upload if exists
+        if 'file' in request.POST:
+            file = request.POST['file'].file
+            filename = request.POST['file'].filename
+            if allowed_file(filename):
+                ext = filename.rsplit('.', 1)[1].lower()
+                new_filename = f"{uuid.uuid4()}.{ext}"
+                file_path = os.path.join(UPLOAD_FOLDER, new_filename)
+                
+                with open(file_path, 'wb') as output_file:
+                    shutil.copyfileobj(file, output_file)
+                
+                book.cover_url = f"/{UPLOAD_FOLDER}/{new_filename}"
+        
+        return {'success': True, 'book': book.to_dict()}
+    except Exception as e:
+        logger.error(f"Error adding book: {str(e)}", exc_info=True)
+        request.dbsession.rollback()
+        return HTTPBadRequest(json_body={'error': 'Failed to add book'})
 
 
-
-# Endpoint untuk mencari buku berdasarkan judul
-@view_config(route_name='book_search', renderer='json')
+@view_config(route_name='book_search', renderer='json', request_method='GET')
+@require_auth
 def book_search(request):
-    query_param = request.params.get('q', '')
+    query_param = request.params.get('q', '').strip()
+    
     if not query_param:
         return {'books': []}
 
-    books = request.dbsession.query(Book).filter(
-        Book.title.ilike(f'%{query_param}%')
-    ).all()
-
-    return {'books': [book.to_dict() for book in books]}
-
-
-@view_config(route_name='book_add', request_method='POST', renderer='json')
-def book_add(request):
-    session = request.dbsession
-    try:
-        data = request.json_body
-
-        # Validasi status
-        status = data.get('status')
-        if not status or status not in [e.value for e in BookStatus]:
-            return Response("Invalid status value", status=400)
-
-        # Membuat book baru tanpa user_id
-        book = Book(
-            openlibrary_id=data['openlibrary_id'],
-            title=data['title'],
-            author=data['author'],
-            published_date=data['published_date'],
-            cover_url=data['cover_url'],
-            description=data['description'],
-            pages=data['pages'],
-            status=BookStatus(status),  # Konversi string ke enum
-            rating=data['rating'],
-            notes=data['notes'],
-            user_id=None  # Tidak mengisi user_id
-        )
-        session.add(book)
-
-        with transaction.manager:
-            session.add(book)
-        
-        return Response("Book added successfully", status=201)
+    # Pencarian buku di database lokal berdasarkan judul
+    books = request.dbsession.query(Book).filter(Book.title.ilike(f'%{query_param}%')).all()
     
-    except IntegrityError as e:
-        session.rollback()
-        return Response(f"Error: {str(e)}", status=400)
-
+    result = []
+    for book in books:
+        result.append({
+            'title': book.title,
+            'author': book.author,
+            'published_date': book.published_date,
+            'isbn': book.isbn,  # Ganti jika ISBN atau field lain yang diinginkan
+        })
+    return {'books': result}
 
 
 # Endpoint untuk mendapatkan daftar buku sesuai status tertentu
-@view_config(route_name='book_list', renderer='json')
+def allowed_file(filename):
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@view_config(route_name='upload_cover', request_method='POST', renderer='json')
 @require_auth
-def book_list(request):
-    status = request.params.get('status')
-    query = request.dbsession.query(Book).filter(Book.user_id == request.user_id)
+def upload_cover(request):
+    try:
+        book_id = request.matchdict['id']
+        book = request.dbsession.query(Book).filter(
+            Book.id == book_id,
+            Book.user_id == request.user_id
+        ).first()
 
-    if status:
-        try:
-            query = query.filter_by(status=parse_book_status(status))
-        except ValueError:
-            return {'books': []}
+        if not book:
+            return HTTPNotFound(json_body={'error': 'Book not found'})
 
-    books = query.order_by(Book.title).all()
-    return {'books': [book.to_dict() for book in books]}
+        file = request.POST['file'].file
+        filename = request.POST['file'].filename
+
+        if not allowed_file(filename):
+            return HTTPBadRequest(json_body={'error': 'File type not allowed'})
+
+        # Buat direktori upload jika belum ada
+        if not os.path.exists(UPLOAD_FOLDER):
+            os.makedirs(UPLOAD_FOLDER)
+
+        # Generate nama file unik
+        ext = filename.rsplit('.', 1)[1].lower()
+        new_filename = f"{uuid.uuid4()}.{ext}"
+        file_path = os.path.join(UPLOAD_FOLDER, new_filename)
+
+        # Simpan file
+        with open(file_path, 'wb') as output_file:
+            shutil.copyfileobj(file, output_file)
+
+        # Simpan URL cover ke database
+        book.cover_url = f"/{UPLOAD_FOLDER}/{new_filename}"
+        request.dbsession.flush()
+
+        return {
+            'success': True,
+            'cover_url': book.cover_url,
+            'message': 'Cover uploaded successfully'
+        }
+    except Exception as e:
+        logger.error(f"Error uploading cover: {str(e)}", exc_info=True)
+        return HTTPBadRequest(json_body={'error': 'Failed to upload cover'})
 
 # Endpoint untuk mendapatkan detail buku
 @view_config(route_name='book_detail', renderer='json')
@@ -127,81 +190,111 @@ def book_detail(request):
 @view_config(route_name='book_update', request_method='PUT', renderer='json')
 @require_auth
 def book_update(request):
-    book_id = request.matchdict['id']
-    book = request.dbsession.query(Book).filter_by(id=book_id, user_id=request.user_id).first()
-
-    if not book:
-        return HTTPNotFound(json_body={'error': 'Buku tidak ditemukan'})
-
     try:
-        json_data = request.json_body
+        book_id = int(request.matchdict['id'])
+        book = request.dbsession.query(Book).filter(
+            Book.id == book_id,
+            Book.user_id == request.user_id
+        ).first()
 
-        if 'status' in json_data:
-            book.status = parse_book_status(json_data['status'])
-        if 'rating' in json_data:
-            book.rating = float(json_data['rating']) if json_data['rating'] else None
-        if 'notes' in json_data:
-            book.notes = json_data['notes']
-
-        request.dbsession.commit()
-        return {'success': True, 'book': book.to_dict()}
-
-    except Exception as e:
-        logger.error(f"Error saat mengupdate buku: {e}")
-        request.dbsession.rollback()
-        return HTTPBadRequest(json_body={'error': str(e)})
-
-
-# Endpoint untuk menghapus buku
-@view_config(route_name='book_delete', request_method='DELETE', renderer='json')
-def book_delete(request):
-    book_id = request.matchdict['id']
-    book = request.dbsession.query(Book).filter_by(id=book_id).first()
-
-    if not book:
-        return HTTPNotFound(json_body={'error': 'Buku tidak ditemukan'})
-
-    try:
-        request.dbsession.delete(book)
-        # Jangan commit secara manual di sini!
-        return {'success': True, 'message': 'Buku berhasil dihapus'}
-    except Exception as e:
-        logger.error(f"Error saat menghapus buku: {e}")
-        request.dbsession.rollback()
-        return HTTPBadRequest(json_body={'error': str(e)})
-
-
-    
-@view_config(route_name='book_interact', request_method='PATCH')
-@require_auth
-def book_interact(request):
-    session = request.dbsession
-    book_id = request.matchdict.get('id')
-    data = request.json_body
-    try:
-        book = session.query(Book).filter_by(id=book_id, user_id=request.user_id).first()
         if not book:
-            return Response("Book not found", status=404)
+            return HTTPNotFound(json_body={'error': 'Book not found'})
 
-        # User hanya boleh mengubah rating & status
+        data = request.json_body
+
+        # Update status
+        if 'status' in data:
+            try:
+                book.status = BookStatus[data['status'].upper()]
+            except KeyError:
+                return HTTPBadRequest(json_body={
+                    'error': f'Invalid status: {data["status"]}. Use UNREAD, READING, or FINISHED'
+                })
+
+        # Update rating
         if 'rating' in data:
-            book.rating = data['rating']
-        if 'status' in data and data['status'] in [e.value for e in BookStatus]:
-            book.status = BookStatus(data['status'])
-        book.updated_at = date.today()
-        session.commit()
-        return Response("Updated successfully", status=200)
+            try:
+                rating = float(data['rating'])
+                if rating < 0 or rating > 5:
+                    return HTTPBadRequest(json_body={'error': 'Rating must be between 0 and 5'})
+                book.rating = rating
+            except (ValueError, TypeError):
+                return HTTPBadRequest(json_body={'error': 'Rating must be a number'})
+
+        # Update description
+        if 'description' in data:
+            book.description = data['description']
+
+        return {
+            'success': True,
+            'book': book.to_dict(),
+            'message': 'Book updated successfully'
+        }
     except Exception as e:
-        session.rollback()
-        return Response(f"Error: {str(e)}", status=400)
+        logger.error(f"Error updating book: {str(e)}", exc_info=True)
+        return HTTPBadRequest(json_body={'error': str(e)})
 
+@view_config(route_name='book_delete', request_method='DELETE', renderer='json')
+@require_auth
+def book_delete(request):
+    try:
+        book_id = int(request.matchdict['id'])
+        book = request.dbsession.query(Book).filter(
+            Book.id == book_id,
+            Book.user_id == request.user_id
+        ).first()
 
-# Endpoint untuk mencari buku di OpenLibrary berdasarkan query
-@view_config(route_name='openlibrary_search', renderer='json', request_method='GET')
-def openlibrary_search(request):
-    query_param = request.params.get('q', '')
-    if not query_param:
-        return {'books': []}
-    books = OpenLibraryService.search_books(query_param)  # Menyearch buku berdasarkan query
-    return {'books': books}
+        if not book:
+            return HTTPNotFound(json_body={'error': 'Book not found'})
+
+        request.dbsession.delete(book)
+        return {'success': True, 'message': 'Book deleted successfully'}
+    except Exception as e:
+        logger.error(f"Error deleting book: {str(e)}", exc_info=True)
+        return HTTPBadRequest(json_body={'error': 'Failed to delete book'})
+    
+@view_config(route_name='books_options', request_method='OPTIONS')
+def books_options(request):
+    return Response(
+        headers={
+            'Access-Control-Allow-Origin': 'http://localhost:3000',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+        }
+    )
+
+@view_config(route_name='books_id_options', request_method='OPTIONS')
+def books_id_options(request):
+    return Response(
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+        }
+    )
+    
+@view_config(route_name='books_add_options', request_method='OPTIONS')
+def books_add_options(request):
+    return Response(
+        headers={
+            'Access-Control-Allow-Origin': 'http://localhost:3000',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+        }
+    )
+    
+@view_config(request_method='OPTIONS')
+def cors_options_view(request):
+    response = Response()
+    response.headers.update({
+        'Access-Control-Allow-Origin': 'http://localhost:3000',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
+    })
+    return response
 

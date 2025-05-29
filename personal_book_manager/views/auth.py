@@ -1,21 +1,42 @@
 from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPBadRequest, HTTPUnauthorized
-from ..models import User
-from sqlalchemy import or_
-from personal_book_manager.security import create_token
-from jwt import decode as jwt_decode, ExpiredSignatureError, InvalidTokenError
-from personal_book_manager.security import get_secret_key
-import bcrypt
 from pyramid.response import Response
+from sqlalchemy import or_
+from ..models import User
+from personal_book_manager.security import create_token, get_secret_key
+from jwt import decode as jwt_decode, ExpiredSignatureError, InvalidTokenError
+import bcrypt
 
 ALGORITHM = 'HS256'
 
 
-@view_config(route_name='register', renderer='json', request_method=['POST', 'OPTIONS'])
-def register(request):
-    if request.method == 'OPTIONS':
-        return Response(status=200)
+@view_config(request_method='OPTIONS', route_name='register')
+def options_register(request):
+    return Response(
+        status=200,
+        headers={
+            'Access-Control-Allow-Origin': 'http://localhost:3000',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+        }
+    )
 
+@view_config(request_method='OPTIONS', route_name='login')
+def options_login(request):
+    return Response(
+        status=200,
+        headers={
+            'Access-Control-Allow-Origin': 'http://localhost:3000',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+        }
+    )
+
+
+@view_config(route_name='register', renderer='json', request_method='POST', permission='__no_permission_required__')
+def register(request):
     try:
         data = request.json_body
     except Exception:
@@ -39,12 +60,8 @@ def register(request):
     request.dbsession.add(user)
     return {"message": "Registered successfully"}
 
-
-@view_config(route_name='login', renderer='json', request_method=['POST', 'OPTIONS'])
+@view_config(route_name='login', renderer='json', request_method='POST')
 def login(request):
-    if request.method == 'OPTIONS':
-        return Response(status=200)
-
     try:
         data = request.json_body
     except Exception:
@@ -64,7 +81,16 @@ def login(request):
         return HTTPUnauthorized(json_body={"error": "Invalid credentials"})
 
     token = create_token(user.id)
-    return {"token": token}
+    
+    response = Response(
+        json_body={"token": token},
+        status=200,
+        headers={
+            'Access-Control-Allow-Origin': 'http://localhost:3000',
+            'Access-Control-Allow-Credentials': 'true',
+        }
+    )
+    return response
 
 
 def require_auth(view_func):
