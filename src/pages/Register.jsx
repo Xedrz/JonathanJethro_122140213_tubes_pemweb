@@ -10,15 +10,24 @@ export default function Register() {
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  try {
     const result = await registerUser({ username, email, password });
 
     if (result.success) {
+      setUsername('');
+      setEmail('');
+      setPassword('');
+      setError('');
       navigate('/login');
     } else {
-      setError(result.message);
+      setError(result.message || 'Registration failed');
     }
-  };
+  } catch (err) {
+    console.error('Registration error:', err);
+    setError('Registration failed. Please try again.');
+  }
+};
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-cover bg-center" style={{ backgroundImage: "url('/buku.jpeg')" }}>

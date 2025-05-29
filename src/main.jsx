@@ -1,10 +1,8 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
+// index.js atau App.js
+import { AuthProvider } from './context/AuthContext';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+<React.StrictMode>
+  <AuthProvider>
     <App />
-  </React.StrictMode>
-);
+  </AuthProvider>
+</React.StrictMode>

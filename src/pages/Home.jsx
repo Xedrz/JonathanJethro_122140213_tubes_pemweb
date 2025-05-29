@@ -4,6 +4,7 @@ import { getBooks, addBook, deleteBook, updateBook } from '../services/api';
 import BookCard from '../components/BookCard';
 import Navbar from '../components/Navbar';
 import debounce from 'lodash.debounce';
+import BookForm from '../components/BookForm';
 
 const Home = () => {
   const [books, setBooks] = useState([]);
@@ -12,101 +13,111 @@ const Home = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [newBook, setNewBook] = useState({ title: '', author: '', rating: 0, status: '' });
 
-  // Debounced fetch function
-  const fetchBooks = useCallback(
-    debounce((query) => {
-      setLoading(true);
-      setErrorMessage('');
-      getBooks(query)
-        .then((res) => {
-          if (res.success) {
-            setBooks(res.books);
-          } else {
-            setErrorMessage(res.message || 'Data tidak ditemukan');
-            setBooks([]);
-          }
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error('Error fetching books:', err);
-          setErrorMessage('Gagal mengambil data buku');
-          setLoading(false);
-        });
-    }, 500),
-    []
-  );
+  const fetchBooks = useCallback(async (query = '') => {
+    setLoading(true);
+    setErrorMessage('');
+    try {
+      const response = await getBooks(query);
+      if (response && response.success) {
+        setBooks(response.books || []);
+      } else {
+        setErrorMessage(response?.message || 'Failed to load books');
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'Network error occurred');
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(() => {
-    fetchBooks(searchQuery);
-  }, [searchQuery, fetchBooks]);
+    // Debounced search
+    const debouncedSearch = useCallback(
+      debounce((query) => fetchBooks(query), 500),
+      []
+    );
+
+    useEffect(() => {
+      fetchBooks();
+    }, [fetchBooks]);
 
   const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value);
+    const query = e.target.value;
+    setSearchQuery(query);
+    debouncedSearch(query);
   };
+const handleDelete = async (bookId) => {
+  if (!bookId) {
+    console.error('Invalid book ID');
+    setErrorMessage('Invalid book ID');
+    return;
+  }
 
-  const handleDelete = (bookId) => {
-    deleteBook(bookId)
-      .then(() => {
-        setBooks(books.filter((book) => book.id !== bookId));
-      })
-      .catch((err) => {
-        console.error('Error deleting book:', err);
-        setErrorMessage('Gagal menghapus buku');
-      });
-  };
+  try {
+    await deleteBook(bookId);
+    setBooks(books.filter((book) => book.id !== bookId));
+  } catch (err) {
+    console.error('Error deleting book:', err);
+    setErrorMessage('Gagal menghapus buku');
+  }
+};
+const handleAddBook = async () => {
+  try {
+    setLoading(true);
+    setErrorMessage('');
+    
+    const bookData = {
+      title: newBook.title,
+      author: newBook.author,
+      description: '', 
+      status: 'UNREAD',
+      rating: 0
+    };
 
-  const handleAddBook = () => {
-    if (!newBook.title || !newBook.author) {
-      setErrorMessage('Judul dan penulis tidak boleh kosong.');
-      return;
+    const res = await addBook(bookData);
+    if (res.success) {
+      setBooks([...books, res.book]);
+      setNewBook({ title: '', author: '', rating: 0, status: '' });
+      setErrorMessage('');
+    } else {
+      setErrorMessage(res.message || 'Gagal menambahkan buku.');
     }
+  } catch (err) {
+    console.error('Error adding book:', err);
+    setErrorMessage(err.message || 'Terjadi kesalahan saat menambahkan buku.');
+  } finally {
+    setLoading(false);
+  }
+};
 
-    addBook(newBook)
-      .then((res) => {
-        if (res.success) {
-          setBooks([...books, res.book]);
-          setNewBook({ title: '', author: '', rating: 0, status: '' });
-          setErrorMessage('');
-        } else {
-          setErrorMessage(res.message || 'Gagal menambahkan buku.');
-        }
-      })
-      .catch((err) => {
-        console.error('Error adding book:', err);
-        setErrorMessage('Terjadi kesalahan saat menambahkan buku.');
-      });
-  };
 
-  const handleUpdateRating = (id, rating) => {
-    updateBook(id, { rating })
-      .then(() => {
-        setBooks((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, rating } : b))
-        );
-      })
-      .catch((err) => {
-        console.error('Error updating rating:', err);
-        setErrorMessage('Gagal memperbarui rating.');
-      });
-  };
+const handleUpdateBook = async (bookId, updatedData) => {
+  if (!bookId) {
+    console.error('Invalid book ID');
+    setErrorMessage('Invalid book ID');
+    return;
+  }
 
-  const handleUpdateStatus = (id, status) => {
-    updateBook(id, { status })
-      .then(() => {
-        setBooks((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, status } : b))
-        );
-      })
-      .catch((err) => {
-        console.error('Error updating status:', err);
-        setErrorMessage('Gagal memperbarui status.');
-      });
-  };
+  try {
+    console.log('Updating book:', bookId, 'with data:', updatedData);
+    const res = await updateBook(bookId, updatedData);
+    if (res.success) {
+      setBooks(books.map(book => 
+        book.id === bookId ? { ...book, ...res.book } : book
+      ));
+    } else {
+      console.error('Update failed:', res.message);
+      setErrorMessage(res.message || 'Failed to update book');
+    }
+  } catch (err) {
+    console.error('Update error details:', err.response?.data || err.message);
+    setErrorMessage(err.response?.data?.message || 'Failed to update book');
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-gray-800 via-gray-900 to-black p-4">
       <Navbar />
-
       <h1 className="text-3xl font-bold text-center text-white mb-6">Daftar Buku</h1>
 
       <div className="mb-6 flex justify-center">
@@ -144,23 +155,29 @@ const Home = () => {
 
       {loading && <p className="text-center text-white text-lg mb-4">Loading...</p>}
       {errorMessage && <div className="text-center text-red-500 mb-4">{errorMessage}</div>}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {books.length > 0 ? (
-          books.map((book) => (
-            <BookCard
-              key={book.id}
-              book={book}
-              onDelete={handleDelete}
-              onUpdateRating={handleUpdateRating}
-              onUpdateStatus={handleUpdateStatus}
-            />
-          ))
-        ) : !loading ? (
-          <p className="text-gray-500 text-center col-span-full">
-            Tidak ada buku yang ditemukan.
-          </p>
-        ) : null}
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 px-4 sm:px-6 lg:px-8">
+    {books.length > 0 ? (
+      books
+        .sort((a, b) => a.title.localeCompare(b.title))
+        .map((book) => (
+          <BookCard
+            key={book.id}
+            book={book}
+            onDelete={handleDelete}
+            onUpdate={handleUpdateBook}
+          />
+        ))
+          ) : !loading ? (
+            <div className="col-span-full text-center py-10">
+              <p className="text-gray-400 text-lg">Buku belum ditambahkan.</p>
+              <button 
+                onClick={() => fetchBooks()} 
+                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+              >
+                Muat Ulang
+              </button>
+            </div>
+          ) : null}
       </div>
     </div>
   );

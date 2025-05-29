@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loginUser } from '../services/api';
+import { loginUser } from '../services/api'; // Pastikan loginUser sudah sesuai
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('');
@@ -10,13 +10,18 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const result = await loginUser({ identifier, password });
+    try {
+      const result = await loginUser({ identifier, password });
 
-    if (result.success) {
-      localStorage.setItem('token', result.token);
-      navigate('/home');
-    } else {
-      setError(result.message);
+      if (result.success) {
+        localStorage.setItem('token', result.token);
+        navigate('/home');
+      } else {
+        setError(result.message || 'Login failed');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Login failed. Please try again.');
     }
   };
 

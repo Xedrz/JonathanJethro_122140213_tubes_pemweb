@@ -9,6 +9,7 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.9.0",
+    "jwt-decode": "^4.0.0",
     "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
@@ -17,7 +18,8 @@
     "react-router-dom": "^7.6.0",
     "react-scripts": "^5.0.1",
     "tailwindcss": "^3.4.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "proxy": "http://localhost:6543"
   },
   "scripts": {
     "start": "react-scripts start",

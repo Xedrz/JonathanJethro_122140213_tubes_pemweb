@@ -1,45 +1,25 @@
-// src/pages/AddBook.jsx
-import React, { useState } from 'react';
-import { addBook } from '../services/api'; // Pastikan addBook diimpor dengan benar
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { addBook } from '../services/api';
+import BookForm from '../components/BookForm';
 
 const AddBook = () => {
-  const [bookData, setBookData] = useState({
-    title: '',
-    author: '',
-    published_date: '',
-    cover_url: '',
-    description: '',
-    pages: '',
-    status: '',
-    rating: '',
-    notes: '',
-  });
+  const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setBookData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (bookData) => {
     try {
-      const result = await addBook(bookData);
-      alert('Buku berhasil ditambahkan!');
-      console.log(result);
+      await addBook(bookData);
+      navigate('/');
     } catch (error) {
-      alert('Gagal menambahkan buku.');
-      console.error(error);
+      alert(error.message || 'Failed to add book');
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      {/* Form fields for bookData */}
-      <button type="submit">Add Book</button>
-    </form>
+    <div>
+      <h2>Add New Book</h2>
+      <BookForm onSubmit={handleSubmit} />
+    </div>
   );
 };
 

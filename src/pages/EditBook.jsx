@@ -1,58 +1,51 @@
-// src/pages/EditBook.jsx
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';  // Ganti useHistory dengan useNavigate
-import { updateBook } from '../services/api'; // Pastikan updateBook diimpor dengan benar
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import BookForm from '../components/BookForm';
+import { getBookById, updateBook } from '../services/api';
 
 const EditBook = () => {
   const { bookId } = useParams();
-  const navigate = useNavigate();  // Ganti useHistory dengan useNavigate
-  const [bookData, setBookData] = useState({
-    title: '',
-    author: '',
-    published_date: '',
-    cover_url: '',
-    description: '',
-    pages: '',
-    status: '',
-    rating: '',
-    notes: '',
-  });
+  const navigate = useNavigate();
+  const [bookData, setBookData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch book data by ID and populate form
     const fetchBook = async () => {
-      const response = await fetch(`http://localhost:6543/api/books/${bookId}`);
-      const data = await response.json();
-      setBookData(data.book);
+      try {
+        const res = await getBookById(bookId);
+        setBookData(res.book);
+      } catch (err) {
+        console.error('Gagal mengambil data buku:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchBook();
   }, [bookId]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setBookData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleUpdate = async (form) => {
     try {
-      const result = await updateBook(bookId, bookData);
-      alert('Buku berhasil diperbarui!');
-      navigate('/'); // Redirect ke halaman utama atau daftar buku
-    } catch (error) {
-      alert('Gagal memperbarui buku.');
-      console.error(error);
+      const result = await updateBook(bookId, form);
+      if (result.success) {
+        alert('Buku berhasil diperbarui');
+        navigate('/books');
+      } else {
+        alert(result.message || 'Gagal memperbarui buku');
+      }
+    } catch (err) {
+      console.error('Error updating book:', err);
+      alert('Terjadi kesalahan saat memperbarui buku');
     }
   };
 
+  if (loading) return <div>Loading...</div>;
+  if (!bookData) return <div>Buku tidak ditemukan</div>;
+
   return (
-    <form onSubmit={handleSubmit}>
-      {/* Form fields for bookData */}
-      <button type="submit">Update Book</button>
-    </form>
+    <div>
+      <h2 className="text-xl font-bold">Edit Buku</h2>
+      <BookForm onSubmit={handleUpdate} initialData={bookData} />
+    </div>
   );
 };
 
